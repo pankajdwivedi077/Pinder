@@ -2,44 +2,43 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
 export const protectRoute = async (req, res, next) => {
-  try{
+	try {
+		const token = req.cookies.jwt;
 
-    const token = req.cookies.jwt;
+		if (!token) {
+			return res.status(401).json({
+				success: false,
+				message: "Not authorized - No token provided",
+			});
+		}
 
-    if(!token){
-        return res.status(401).json({
-            success: false,
-            message: "Not authorized - No Token Provided"
-        })
-    }
+		const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+		if (!decoded) {
+			return res.status(401).json({
+				success: false,
+				message: "Not authorized - Invalid token",
+			});
+		}
 
-    if(!decoded){
-        return res.status(401).json({
-            success: false,
-            message: "invalid token"
-        })
-    }
+		const currentUser = await User.findById(decoded.id);
 
-    const currentUser = User.findById(decoded.id);
+		req.user = currentUser;
 
-    req.user = currentUser;
+		next();
+	} catch (error) {
+		console.log("Error in auth middleware: ", error);
 
-    next();
-
-  }catch (e){
-     console.log("error in auth middleware ", e);
-     if(e instanceof jwt.JsonWebTokenError){
-        return res.status(401).json({
-            success: false,
-            message: "Not authorized -invalid token"
-        })
-     }else{
-        return res.status(500).json({
-            success: false,
-            message: "internal server error"
-        })
-     }
-  }
-}
+		if (error instanceof jwt.JsonWebTokenError) {
+			return res.status(401).json({
+				success: false,
+				message: "Not authorized - Invalid token",
+			});
+		} else {
+			return res.status(500).json({
+				success: false,
+				message: "Internal server error",
+			});
+		}
+	}
+};
