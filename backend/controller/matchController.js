@@ -1,4 +1,5 @@
 import User from "../models/User.js";
+import { getConnectedUsers, getIO } from "../socket/socket.server.js";
 
 export const swipeRight = async (req, res) => {
   try {
@@ -23,6 +24,31 @@ export const swipeRight = async (req, res) => {
         currentUser.matches.push(likedUserId);
         linkedUser.matches.push(currentUser.id);
         await Promise.all([await currentUser.save(), await linkedUser.save()]);
+
+        // socket
+
+        const connectedUsers = getConnectedUsers();
+
+        const io = getIO();
+
+        const  likedUserSocketId = connectedUsers.get(likedUserId);
+
+        if (likedUserSocketId) {
+          io.to(likedUserSocketId).emit("newMatch", {
+            _id: currentUser._id,
+            name: currentUser.name,
+            image: currentUser.image,
+          })
+        }
+
+        const currentSocketId = connectedUsers.get(currentUser._id.toString());
+        if(currentSocketId){
+          io.to(likedUserSocketId).emit("newMatch", {
+            _id: linkedUser._id,
+            name: linkedUser.name,
+            image: linkedUser.image,
+          })
+        }
 
         
 
@@ -68,56 +94,53 @@ export const swipeLeft = async (req, res) => {
 };
 
 export const getMatches = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).populate(
-      "matches",
-      "name image"
-    );
+	try {
+		const user = await User.findById(req.user.id).populate("matches", "name image");
 
-    res.status(200).json({
-      success: true,
-      matches: user.matches,
-    });
-  } catch (e) {
-    console.log("error in getMatches ", e);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
+		res.status(200).json({
+			success: true,
+			matches: user.matches,
+		});
+	} catch (error) {
+		console.log("Error in getMatches: ", error);
+
+		res.status(500).json({
+			success: false,
+			message: "Internal server error",
+		});
+	}
 };
 
-export const getUserProfile = async (req, res) => {
-  try {
-    const currentUser = await User.findById(req.user.id);
+export const getUserProfiles = async (req, res) => {
+	try {
+		const currentUser = await User.findById(req.user.id);
 
-    const users = await User.find({
-      $and: [
-        { _id: { $ne: currentUser.id } },
-        { _id: { $nin: currentUser.likes } },
-        { _id: { $nin: currentUser.dislikes } },
-        { _id: { $nin: currentUser.matches } },
-        {
-          gender:
-            currentUser.genderPreference === "both"
-              ? { $in: ["male", "female"] }
-              : currentUser.genderPreference,
-        },
-        {
-          genderPreference: { $in: [currentUser.gender, "both"] },
-        },
-      ],
-    });
+		const users = await User.find({
+			$and: [
+				{ _id: { $ne: currentUser.id } },
+				{ _id: { $nin: currentUser.likes } },
+				{ _id: { $nin: currentUser.dislikes } },
+				{ _id: { $nin: currentUser.matches } },
+				{
+					gender:
+						currentUser.genderPreference === "both"
+							? { $in: ["male", "female"] }
+							: currentUser.genderPreference,
+				},
+				{ genderPreference: { $in: [currentUser.gender, "both"] } },
+			],
+		});
 
-    res.status(200).json({
-      success: true,
-      users,
-    });
-  } catch (e) {
-    console.log("error in getUserProfiel ", e);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
+		res.status(200).json({
+			success: true,
+			users,
+		});
+	} catch (error) {
+		console.log("Error in getUserProfiles: ", error);
+
+		res.status(500).json({
+			success: false,
+			message: "Internal server error",
+		});
+	}
 };
